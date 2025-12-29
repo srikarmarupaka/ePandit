@@ -4,7 +4,7 @@ import { Ritual, RitualStep, UserProfile } from '../types';
 import { PANDIT_VOICES } from '../constants';
 import { generateRitualFlow, getPanditAudio } from '../services/geminiService';
 import { decode, decodeAudioData } from '../utils/audioUtils';
-import { Play, Pause, SkipForward, SkipBack, Loader2, Volume2, Info, Settings2 } from 'lucide-react';
+import { Play, Pause, SkipForward, SkipBack, Loader2, Volume2, Info, Settings2, AlertCircle, Flower } from 'lucide-react';
 
 interface PoojaPlayerProps {
   ritual: Ritual;
@@ -20,6 +20,7 @@ const PoojaPlayer: React.FC<PoojaPlayerProps> = ({ ritual, user, onClose }) => {
   const [audioLoading, setAudioLoading] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState(PANDIT_VOICES[0].id);
   const [showSettings, setShowSettings] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -27,11 +28,13 @@ const PoojaPlayer: React.FC<PoojaPlayerProps> = ({ ritual, user, onClose }) => {
   useEffect(() => {
     const fetchFlow = async () => {
       setLoading(true);
+      setError(null);
       try {
         const flow = await generateRitualFlow(ritual.title, user);
         setSteps(flow);
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
+        setError(err.message || "Could not generate ritual flow. Please try again.");
       } finally {
         setLoading(false);
       }
@@ -41,7 +44,9 @@ const PoojaPlayer: React.FC<PoojaPlayerProps> = ({ ritual, user, onClose }) => {
 
   const stopAudio = () => {
     if (audioSourceRef.current) {
-      audioSourceRef.current.stop();
+      try {
+        audioSourceRef.current.stop();
+      } catch (e) {}
       audioSourceRef.current = null;
     }
     setPlaying(false);
@@ -51,11 +56,15 @@ const PoojaPlayer: React.FC<PoojaPlayerProps> = ({ ritual, user, onClose }) => {
     if (!steps[currentStepIndex]) return;
     
     setAudioLoading(true);
-    const textToSpeak = `${steps[currentStepIndex].title}. ${steps[currentStepIndex].instruction}. Mantra: ${steps[currentStepIndex].mantra}`;
+    setError(null);
+    const step = steps[currentStepIndex];
+    const textToSpeak = `${step.title}. ${step.instruction}. Mantra: ${step.mantra}`;
     
     try {
       const base64Audio = await getPanditAudio(textToSpeak, selectedVoice);
-      if (!base64Audio) throw new Error("Audio generation failed");
+      if (!base64Audio) {
+        throw new Error("The Pandit's voice is unavailable. This may be due to a temporary service issue or a spiritual text filter. Please try a different step or voice.");
+      }
 
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -78,8 +87,9 @@ const PoojaPlayer: React.FC<PoojaPlayerProps> = ({ ritual, user, onClose }) => {
       audioSourceRef.current = source;
       source.start(0);
       setPlaying(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setError(err.message || "Failed to generate audio.");
     } finally {
       setAudioLoading(false);
     }
@@ -87,6 +97,7 @@ const PoojaPlayer: React.FC<PoojaPlayerProps> = ({ ritual, user, onClose }) => {
 
   const nextStep = () => {
     stopAudio();
+    setError(null);
     if (currentStepIndex < steps.length - 1) {
       setCurrentStepIndex(prev => prev + 1);
     }
@@ -94,6 +105,7 @@ const PoojaPlayer: React.FC<PoojaPlayerProps> = ({ ritual, user, onClose }) => {
 
   const prevStep = () => {
     stopAudio();
+    setError(null);
     if (currentStepIndex > 0) {
       setCurrentStepIndex(prev => prev - 1);
     }
@@ -121,124 +133,112 @@ const PoojaPlayer: React.FC<PoojaPlayerProps> = ({ ritual, user, onClose }) => {
             onClick={() => setShowSettings(!showSettings)}
             className={`p-2 rounded-full transition ${showSettings ? 'bg-orange-200 text-orange-900' : 'text-orange-700 hover:bg-orange-100'}`}
           >
-            <Settings2 className="w-5 h-5" />
+            <Settings2 className="w-6 h-6" />
           </button>
-          <div className="text-right">
-            <h2 className="text-xl md:text-2xl font-marcellus text-orange-900">{ritual.title}</h2>
-            <p className="text-xs text-orange-700">Step {currentStepIndex + 1} of {steps.length}</p>
-          </div>
         </div>
       </div>
 
       {showSettings && (
-        <div className="bg-orange-50 border-2 border-orange-200 rounded-3xl p-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-300">
-          <h4 className="text-sm font-bold text-orange-900 uppercase mb-4 flex items-center gap-2">
-            <Volume2 className="w-4 h-4" /> Select Pandit Voice Style
-          </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {PANDIT_VOICES.map((voice) => (
+        <div className="bg-orange-50 p-6 rounded-2xl mb-8 border border-orange-200 animate-in fade-in slide-in-from-top-4">
+          <h3 className="text-orange-900 font-bold mb-4 flex items-center gap-2">
+            <Volume2 className="w-5 h-5" /> Select Pandit Voice
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {PANDIT_VOICES.map(voice => (
               <button
                 key={voice.id}
-                onClick={() => {
-                  setSelectedVoice(voice.id);
-                  stopAudio();
-                }}
-                className={`text-left p-4 rounded-xl border-2 transition ${
+                onClick={() => setSelectedVoice(voice.id)}
+                className={`p-4 rounded-xl border-2 transition text-left ${
                   selectedVoice === voice.id 
                     ? 'border-orange-500 bg-white shadow-md' 
-                    : 'border-orange-100 bg-orange-50 hover:bg-white hover:border-orange-200'
+                    : 'border-orange-100 bg-orange-50 hover:border-orange-200'
                 }`}
               >
-                <p className={`font-bold text-sm ${selectedVoice === voice.id ? 'text-orange-600' : 'text-orange-800'}`}>
-                  {voice.name}
-                </p>
-                <p className="text-xs text-orange-500">{voice.description}</p>
+                <div className="font-bold text-orange-900">{voice.name}</div>
+                <div className="text-xs text-orange-600">{voice.description}</div>
               </button>
             ))}
           </div>
         </div>
       )}
 
-      <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border-4 border-orange-100 mb-8">
-        <div className="p-8 md:p-12 text-center">
-          <div className="mb-6">
-            <span className={`inline-block px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest ${currentStep.isSankalpam ? 'bg-orange-600 text-white' : 'bg-orange-100 text-orange-800'}`}>
-              {currentStep.isSankalpam ? 'Sankalpam (Vow)' : 'Ritual Phase'}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl mb-8 flex items-center gap-3">
+          <AlertCircle className="w-5 h-5" />
+          <p>{error}</p>
+        </div>
+      )}
+
+      {currentStep && (
+        <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-orange-100">
+          <div className="spiritual-gradient p-12 text-center text-white relative">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 opacity-20">
+               <Flower className="w-32 h-32" />
+            </div>
+            <span className="relative inline-block px-4 py-1 bg-white/20 rounded-full text-xs font-bold uppercase tracking-widest mb-4">
+              Step {currentStepIndex + 1} of {steps.length}
             </span>
-          </div>
-          
-          <h3 className="text-3xl font-marcellus text-orange-900 mb-6">{currentStep.title}</h3>
-          
-          <div className="bg-orange-50 rounded-2xl p-6 mb-8 border border-orange-200">
-            <h4 className="text-xs font-bold text-orange-600 uppercase mb-2 flex items-center justify-center gap-2">
-              <Info className="w-4 h-4" /> Instructions
-            </h4>
-            <p className="text-lg text-orange-900">{currentStep.instruction}</p>
+            <h2 className="relative text-3xl font-marcellus mb-2">{currentStep.title}</h2>
+            <p className="relative text-orange-100 italic">{currentStep.isSankalpam ? "Initiation & Intention" : "Pooja Upachara"}</p>
           </div>
 
-          <div className="relative group">
-            <div className="absolute -inset-1 bg-gradient-to-r from-orange-400 to-yellow-400 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
-            <div className="relative bg-white p-8 rounded-2xl border-2 border-orange-200">
-              <h4 className="text-xs font-bold text-orange-600 uppercase mb-4">Mantra</h4>
-              <p className="text-2xl md:text-3xl font-marcellus text-orange-900 leading-relaxed italic">
-                "{currentStep.mantra}"
+          <div className="p-8 md:p-12 space-y-8">
+            <div className="bg-orange-50 p-6 rounded-2xl border-l-4 border-orange-500">
+              <h3 className="text-sm font-bold text-orange-800 uppercase mb-3 flex items-center gap-2">
+                <Info className="w-4 h-4" /> Instructions
+              </h3>
+              <p className="text-orange-900 leading-relaxed text-lg">
+                {currentStep.instruction}
+              </p>
+            </div>
+
+            <div className="text-center space-y-4">
+              <h3 className="text-sm font-bold text-orange-400 uppercase">Mantra</h3>
+              <p className="text-2xl md:text-3xl font-marcellus text-orange-900 leading-snug">
+                {currentStep.mantra}
+              </p>
+            </div>
+
+            <div className="pt-8 flex flex-col items-center gap-8">
+              <div className="flex items-center gap-6">
+                <button 
+                  onClick={prevStep}
+                  disabled={currentStepIndex === 0}
+                  className="p-4 text-orange-600 hover:bg-orange-50 rounded-full disabled:opacity-30 disabled:hover:bg-transparent"
+                >
+                  <SkipBack className="w-8 h-8 fill-current" />
+                </button>
+
+                <button 
+                  onClick={playing ? stopAudio : playCurrentStep}
+                  disabled={audioLoading}
+                  className="w-20 h-20 bg-orange-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-orange-700 transition transform hover:scale-105 disabled:bg-orange-300"
+                >
+                  {audioLoading ? (
+                    <Loader2 className="w-10 h-10 animate-spin" />
+                  ) : playing ? (
+                    <Pause className="w-10 h-10 fill-current" />
+                  ) : (
+                    <Play className="w-10 h-10 fill-current translate-x-1" />
+                  )}
+                </button>
+
+                <button 
+                  onClick={nextStep}
+                  disabled={currentStepIndex === steps.length - 1}
+                  className="p-4 text-orange-600 hover:bg-orange-50 rounded-full disabled:opacity-30 disabled:hover:bg-transparent"
+                >
+                  <SkipForward className="w-8 h-8 fill-current" />
+                </button>
+              </div>
+              
+              <p className="text-sm text-orange-500 min-h-[1.25rem]">
+                {playing ? "Reciting..." : audioLoading ? "Invoking the Pandit..." : "Press Play to hear the mantra"}
               </p>
             </div>
           </div>
         </div>
-
-        <div className="bg-orange-900 p-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={prevStep} 
-              disabled={currentStepIndex === 0}
-              className="p-3 rounded-full bg-orange-800 text-white hover:bg-orange-700 disabled:opacity-50 transition"
-            >
-              <SkipBack className="w-6 h-6" />
-            </button>
-            
-            <button 
-              onClick={playing ? stopAudio : playCurrentStep}
-              disabled={audioLoading}
-              className="w-16 h-16 flex items-center justify-center rounded-full bg-orange-500 text-white hover:bg-orange-400 transition transform hover:scale-105 shadow-lg"
-            >
-              {audioLoading ? (
-                <Loader2 className="w-8 h-8 animate-spin" />
-              ) : playing ? (
-                <Pause className="w-8 h-8 fill-current" />
-              ) : (
-                <Play className="w-8 h-8 fill-current ml-1" />
-              )}
-            </button>
-
-            <button 
-              onClick={nextStep}
-              disabled={currentStepIndex === steps.length - 1}
-              className="p-3 rounded-full bg-orange-800 text-white hover:bg-orange-700 disabled:opacity-50 transition"
-            >
-              <SkipForward className="w-6 h-6" />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2 text-orange-200">
-            <Volume2 className="w-5 h-5" />
-            <span className="text-sm font-medium">Reciting: {PANDIT_VOICES.find(v => v.id === selectedVoice)?.name}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white p-6 rounded-2xl border border-orange-100 shadow-sm">
-          <h5 className="font-bold text-orange-800 mb-2">Devotee Details</h5>
-          <p className="text-sm text-orange-700">Yajamana: {user.name}</p>
-          <p className="text-sm text-orange-700">Gotra: {user.gotra}</p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl border border-orange-100 shadow-sm">
-          <h5 className="font-bold text-orange-800 mb-2">Muhurta (Time)</h5>
-          <p className="text-sm text-orange-700">Date: {new Date().toLocaleDateString()}</p>
-          <p className="text-sm text-orange-700">Location: {user.location?.city || 'Vedic Realm'}</p>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

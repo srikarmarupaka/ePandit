@@ -151,7 +151,7 @@ const App: React.FC = () => {
       </main>
 
       <footer className="max-w-6xl mx-auto mt-20 pt-12 border-t border-orange-200 text-center text-orange-400 text-sm">
-        <p>© 2024 E-Pandit Pro — Harmonizing Vedic Tradition with Intelligence</p>
+        <p>© 2025 E-Pandit Pro — Harmonizing Vedic Tradition with Intelligence</p>
       </footer>
     </div>
   );
