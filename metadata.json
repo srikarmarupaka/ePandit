@@ -1,0 +1,7 @@
+{
+  "name": "E-Pandit Pro",
+  "description": "A sophisticated Vedic Pandit application that guides you through rituals with dynamic Sankalpam and real-time mantra recitation using advanced Gemini TTS.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
